@@ -13,6 +13,11 @@ PyObject *pModule;
 Napi::Value StartInterpreter(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
+#ifdef LINUX_SO_NAME 
+  //automatically do the workaround of manually loading the python .so file on linux
+  dlopen(Py_STRINGIFY(LINUX_SO_NAME), RTLD_LAZY | RTLD_GLOBAL);
+#endif
+
   if (info.Length() == 1 && info[0].IsString()) {
     std::string pathString = info[0].As<Napi::String>().ToString();
     std::wstring path(pathString.length(), L'#');
@@ -26,10 +31,6 @@ Napi::Value StartInterpreter(const Napi::CallbackInfo &info) {
   if (isInitialized == 0) {
     Py_Initialize();
   }
-
-  int threadsInitialized = PyEval_ThreadsInitialized();
-  if (threadsInitialized == 0)
-    PyEval_InitThreads();
 
   /* Load PyNode's own module into Python. This makes WrappedJSObject instances
      behave better (eg, having attributes) */
@@ -46,28 +47,6 @@ Napi::Value StartInterpreter(const Napi::CallbackInfo &info) {
   /* Release the GIL. The other entry points back into Python re-acquire it */
   PyEval_SaveThread();
 
-  return env.Null();
-}
-
-Napi::Value DlOpen(const Napi::CallbackInfo &info) {
-  Napi::Env env = info.Env();
-
-#ifdef _WIN32
-  Napi::Error::New(env, "dlOpen does not work in windows")
-      .ThrowAsJavaScriptException();
-  return env.Null();
-#endif
-
-  if (!info[0] || !info[0].IsString()) {
-    Napi::Error::New(env, "Must pass a string to 'dlOpen'")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  std::string dlFile = info[0].As<Napi::String>().ToString();
-#ifndef _WIN32
-  dlopen(dlFile.c_str(), RTLD_LAZY | RTLD_GLOBAL);
-#endif
   return env.Null();
 }
 
@@ -236,14 +215,8 @@ Napi::Value Call(const Napi::CallbackInfo &info) {
 
 Napi::Object PyNodeInit(Napi::Env env, Napi::Object exports) {
 
-  exports.Set(Napi::String::New(env, "dlOpen"),
-              Napi::Function::New(env, DlOpen));
-
   exports.Set(Napi::String::New(env, "startInterpreter"),
               Napi::Function::New(env, StartInterpreter));
-
-  exports.Set(Napi::String::New(env, "dlOpen"),
-              Napi::Function::New(env, DlOpen));
 
   exports.Set(Napi::String::New(env, "appendSysPath"),
               Napi::Function::New(env, AppendSysPath));

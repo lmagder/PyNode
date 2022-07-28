@@ -7,6 +7,7 @@ Napi::Object PyNodeWrappedPythonObject::Init(Napi::Env env, Napi::Object exports
     Napi::Function func = DefineClass(env, "PyNodeWrappedPythonObject", {
         InstanceMethod("call", &PyNodeWrappedPythonObject::Call),
         InstanceMethod("get", &PyNodeWrappedPythonObject::GetAttr),
+        InstanceMethod("set", &PyNodeWrappedPythonObject::SetAttr),
         InstanceMethod("repr", &PyNodeWrappedPythonObject::Repr)
     });
 
@@ -31,6 +32,11 @@ PyNodeWrappedPythonObject::PyNodeWrappedPythonObject(const Napi::CallbackInfo &i
     // TODO - Py_DECREF in destructor
 }
 
+PyNodeWrappedPythonObject::~PyNodeWrappedPythonObject()
+{
+    Py_DECREF(this->_value);
+}
+
 Napi::FunctionReference PyNodeWrappedPythonObject::constructor;
 
 Napi::Value PyNodeWrappedPythonObject::GetAttr(const Napi::CallbackInfo &info){
@@ -45,6 +51,24 @@ Napi::Value PyNodeWrappedPythonObject::GetAttr(const Napi::CallbackInfo &info){
     }
     Napi::Value returnval = ConvertFromPython(env, attr);
     return returnval;
+}
+
+Napi::Value PyNodeWrappedPythonObject::SetAttr(const Napi::CallbackInfo &info){
+    py_ensure_gil ctx;
+    Napi::Env env = info.Env();
+    if (info.Length() != 2) {
+        std::string error("Missing method name and value");
+        Napi::Error::New(env, error).ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    PyObject* pValue = ConvertToPython(info[1]);
+    std::string attrname = info[0].ToString();
+    if (PyObject_SetAttrString(this->_value, attrname.c_str(), pValue) != 0) {
+        std::string error("Attribute " + attrname + " not found.");
+        Napi::Error::New(env, error).ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    return env.Null();;
 }
 
 Napi::Value PyNodeWrappedPythonObject::Call(const Napi::CallbackInfo &info){
