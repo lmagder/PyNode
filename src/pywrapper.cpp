@@ -108,6 +108,7 @@ Napi::Value PyNodeWrappedPythonObject::Repr(const Napi::CallbackInfo &info){
     }
     const char * repr_c = PyUnicode_AsUTF8(repr);
     Napi::Value result = Napi::String::New(env, repr_c); // (Napi takes ownership of repr_c)
+    Py_DECREF(repr);
     return result;
 }
 

@@ -12,6 +12,7 @@ extern "C" {
 PyMODINIT_FUNC PyInit_jswrapper(void);
 PyObject *WrappedJSObject_New(napi_env, napi_value);
 napi_value WrappedJSObject_get_napi_value(PyObject *);
+extern PyTypeObject WrappedJSType;
 
 #ifdef __cplusplus
 }

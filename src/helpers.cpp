@@ -157,54 +157,29 @@ extern "C" {
 }
 
 Napi::Array BuildV8Array(Napi::Env env, PyObject *obj) {
-  Py_ssize_t len = PyList_Size(obj);
+  const bool isList = PyList_Check(obj);
+  Py_ssize_t len = isList ? PyList_Size(obj) : PyTuple_Size(obj);
 
   auto arr = Napi::Array::New(env);
 
   for (Py_ssize_t i = 0; i < len; i++) {
     PyObject *localObj;
-    if (strcmp(obj->ob_type->tp_name, "list") == 0) {
+    if (isList) {
       localObj = PyList_GetItem(obj, i);
     } else {
       localObj = PyTuple_GetItem(obj, i);
     }
 
-    if (!localObj)
-      continue;
-
-    if (strcmp(localObj->ob_type->tp_name, "int") == 0) {
-      double result = PyLong_AsDouble(localObj);
-      arr.Set(i, result);
-    } else if (strcmp(localObj->ob_type->tp_name, "str") == 0) {
-      auto str = PyUnicode_AsUTF8(localObj);
-      arr.Set(i, str);
-    } else if (strcmp(localObj->ob_type->tp_name, "float") == 0) {
-      double result = PyFloat_AsDouble(localObj);
-      arr.Set(i, result);
-    } else if (strcmp(localObj->ob_type->tp_name, "bytes") == 0) {
-      auto str = PyBytes_AsString(localObj);
-      arr.Set(i, str);
-    } else if (strcmp(localObj->ob_type->tp_name, "bool") == 0) {
-      bool b = PyObject_IsTrue(localObj);
-      arr.Set(i, b);
-    } else if (strcmp(localObj->ob_type->tp_name, "list") == 0) {
-      auto innerArr = BuildV8Array(env, localObj);
-      arr.Set(i, innerArr);
-    } else if (strcmp(localObj->ob_type->tp_name, "dict") == 0) {
-      auto innerDict = BuildV8Dict(env, localObj);
-      arr.Set(i, innerDict);
-    }
+    Napi::Value result = env.Null();
+    if (localObj) 
+      result = ConvertFromPython(env, localObj);
+    
+    arr.Set(i, result);
+    
   }
   return arr;
 }
 
-std::string getKey(PyObject *key) {
-  if (strcmp(key->ob_type->tp_name, "str") == 0) {
-    return std::string(PyUnicode_AsUTF8(key));
-  } else {
-    return std::string(PyBytes_AsString(key));
-  }
-}
 
 Napi::Object BuildV8Dict(Napi::Env env, PyObject *obj) {
   auto keys = PyDict_Keys(obj);
@@ -213,63 +188,44 @@ Napi::Object BuildV8Dict(Napi::Env env, PyObject *obj) {
 
   for (Py_ssize_t i = 0; i < size; i++) {
     auto key = PyList_GetItem(keys, i);
+    auto keyString = PyObject_Repr(key);
     auto val = PyDict_GetItem(obj, key);
-    auto jsKey = Napi::String::New(env, getKey(key));
-    std::string kk = jsKey.As<Napi::String>().ToString();
-
-    if (strcmp(val->ob_type->tp_name, "int") == 0) {
-      double result = PyLong_AsDouble(val);
-      jsObj.Set(jsKey, result);
-    } else if (strcmp(val->ob_type->tp_name, "str") == 0) {
-      auto str = PyUnicode_AsUTF8(val);
-      jsObj.Set(jsKey, str);
-    } else if (strcmp(val->ob_type->tp_name, "float") == 0) {
-      double result = PyFloat_AsDouble(val);
-      jsObj.Set(jsKey, result);
-    } else if (strcmp(val->ob_type->tp_name, "bytes") == 0) {
-      auto str = PyBytes_AsString(val);
-      jsObj.Set(jsKey, str);
-    } else if (strcmp(val->ob_type->tp_name, "bool") == 0) {
-      bool b = PyObject_IsTrue(val);
-      jsObj.Set(jsKey, b);
-    } else if (strcmp(val->ob_type->tp_name, "list") == 0) {
-      auto innerArr = BuildV8Array(env, val);
-      jsObj.Set(jsKey, innerArr);
-    } else if (strcmp(val->ob_type->tp_name, "dict") == 0) {
-      auto innerDict = BuildV8Dict(env, val);
-      jsObj.Set(jsKey, innerDict);
-    }
+    auto jsKey = Napi::String::New(env, PyUnicode_AsUTF8(keyString));
+    jsObj.Set(jsKey, ConvertFromPython(env, val));
+    Py_DECREF(keyString);
   }
+
+  Py_DECREF(keys);
 
   return jsObj;
 }
 
 Napi::Value ConvertFromPython(Napi::Env env, PyObject * pValue) {
     Napi::Value result = env.Null();
-    if (strcmp(pValue->ob_type->tp_name, "NoneType") == 0) {
+    if (pValue == Py_None) {
       // leave as null
-    } else if (strcmp(pValue->ob_type->tp_name, "bool") == 0) {
+    } else if (PyBool_Check(pValue) == 0) {
       bool b = PyObject_IsTrue(pValue);
       result = Napi::Boolean::New(env, b);
-    } else if (strcmp(pValue->ob_type->tp_name, "int") == 0) {
+    } else if (PyLong_Check(pValue)) {
       double d = PyLong_AsDouble(pValue);
       result = Napi::Number::New(env, d);
-    } else if (strcmp(pValue->ob_type->tp_name, "float") == 0) {
+    } else if (PyFloat_Check(pValue)) {
       double d = PyFloat_AsDouble(pValue);
       result = Napi::Number::New(env, d);
-    } else if (strcmp(pValue->ob_type->tp_name, "bytes") == 0) {
+    } else if (PyBytes_Check(pValue)) {
       auto str = Napi::String::New(env, PyBytes_AsString(pValue));
       result = str;
-    } else if (strcmp(pValue->ob_type->tp_name, "str") == 0) {
+    } else if (PyUnicode_Check(pValue)) {
       auto str = Napi::String::New(env, PyUnicode_AsUTF8(pValue));
       result = str;
-    } else if (strcmp(pValue->ob_type->tp_name, "list") == 0) {
+    } else if (PyList_Check(pValue) || PyTuple_Check(pValue)) {
       auto arr = BuildV8Array(env, pValue);
       result = arr;
-    } else if (strcmp(pValue->ob_type->tp_name, "dict") == 0) {
+    } else if (PyDict_Check(pValue)) {
       auto obj = BuildV8Dict(env, pValue);
       result = obj;
-    } else if (strcmp(pValue->ob_type->tp_name, "pynode.WrappedJSObject") == 0) {
+    } else if (pValue->ob_type == &WrappedJSType) {
       auto obj = Napi::Value(env, WrappedJSObject_get_napi_value(pValue));
       result = obj;
     } else {

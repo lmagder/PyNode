@@ -195,7 +195,7 @@ PyObject * WrappedJSObject_str(PyObject *_self) {
     return pyval;
 }
 
-static PyTypeObject WrappedJSType = {
+PyTypeObject WrappedJSType = {
     PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "pynode.WrappedJSObject",
     .tp_doc = "A JavaScript object",
