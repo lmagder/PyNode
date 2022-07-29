@@ -188,7 +188,7 @@ Napi::Object BuildV8Dict(Napi::Env env, PyObject *obj) {
 
   for (Py_ssize_t i = 0; i < size; i++) {
     auto key = PyList_GetItem(keys, i);
-    auto keyString = PyObject_Repr(key);
+    auto keyString = PyObject_Str(key);
     auto val = PyDict_GetItem(obj, key);
     auto jsKey = Napi::String::New(env, PyUnicode_AsUTF8(keyString));
     jsObj.Set(jsKey, ConvertFromPython(env, val));
