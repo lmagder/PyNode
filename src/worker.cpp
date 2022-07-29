@@ -13,17 +13,16 @@ void PyNodeWorker::Execute() {
     py_thread_context ctx;
 
     pValue.reset(PyObject_CallObject(pFunc.get(), pyArgs.get()));
-    pyArgs = nullptr;
-    pFunc = nullptr;
-
-    py_object_owned errOccurred(PyErr_Occurred());
+    PyObject* errOccurred = PyErr_Occurred();
 
     if (errOccurred != NULL) {
       std::string error;
       PyObject *pType, *pValue, *pTraceback;
       PyErr_Fetch(&pType, &pValue, &pTraceback);
-      const char *value = PyUnicode_AsUTF8(pValue);
       py_object_owned pTypeString(PyObject_Str(pType));
+      py_object_owned pValueString(PyObject_Str(pValue));
+
+      const char *value = PyUnicode_AsUTF8(pValueString.get());
       const char *type = PyUnicode_AsUTF8(pTypeString.get());
       PyTracebackObject *tb = (PyTracebackObject *)pTraceback;
       _frame *frame = tb->tb_frame;
@@ -47,6 +46,9 @@ void PyNodeWorker::Execute() {
       PyErr_Print();
       SetError(error);
     }
+
+    pFunc = nullptr;
+    pyArgs = nullptr;
   }
 }
 
@@ -70,5 +72,5 @@ void PyNodeWorker::OnOK() {
 }
 
 void PyNodeWorker::OnError(const Napi::Error &e) {
-  Callback().Call({Napi::Error::New(Env(), e.what()).Value()});
+  Callback().Call({e.Value(), Env().Null()});
 }

@@ -63,6 +63,7 @@ py_object_owned BuildPyArray(Napi::Env env, Napi::Value arg) {
     auto element = arr.Get(i);
     py_object_owned pyval = ConvertToPython(element);
     if (pyval != NULL) {
+      Py_INCREF(pyval.get()); //PyList_SetItem doesn't inc ref
       PyList_SetItem(list.get(), i, pyval.get());
     }
   }
@@ -98,6 +99,7 @@ py_object_owned BuildPyArgs(const Napi::CallbackInfo &args, size_t start_index, 
     auto arg = args[i];
     py_object_owned pyobj = ConvertToPython(arg);
     if (pyobj != NULL) {
+      Py_INCREF(pyobj.get()); //PyTuple_SetItem doesn't inc ref
       PyTuple_SetItem(pArgs.get(), i - start_index, pyobj.get());
     }
   }
@@ -199,7 +201,7 @@ Napi::Value ConvertFromPython(Napi::Env env, PyObject * pValue) {
     Napi::Value result = env.Null();
     if (pValue == Py_None) {
       // leave as null
-    } else if (PyBool_Check(pValue) == 0) {
+    } else if (PyBool_Check(pValue)) {
       bool b = PyObject_IsTrue(pValue);
       result = Napi::Boolean::New(env, b);
     } else if (PyLong_Check(pValue)) {

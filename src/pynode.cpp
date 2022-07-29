@@ -8,10 +8,14 @@
 #include "jswrapper.h"
 #include <iostream>
 
-py_object_owned pModule;
+py_object_owned pPyNodeModule;
+py_object_owned pCurrentModule;
 
 Napi::Value StartInterpreter(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
+
+  if (Py_IsInitialized())
+      return env.Null();
 
 #ifdef LINUX_SO_NAME 
   //automatically do the workaround of manually loading the python .so file on linux
@@ -27,21 +31,19 @@ Napi::Value StartInterpreter(const Napi::CallbackInfo &info) {
   
   PyImport_AppendInittab("pynode", &PyInit_jswrapper);
 
-  int isInitialized = Py_IsInitialized();
-  if (isInitialized == 0) {
-    Py_Initialize();
-  }
+  Py_Initialize();
 
   /* Load PyNode's own module into Python. This makes WrappedJSObject instances
      behave better (eg, having attributes) */
   py_object_owned pName(PyUnicode_DecodeFSDefault("pynode"));
-  pModule.reset(PyImport_Import(pName.get()));
-  if (pModule == NULL) {
+  pPyNodeModule.reset(PyImport_Import(pName.get()));
+  if (pPyNodeModule == NULL) {
     PyErr_Print();
     Napi::Error::New(env, "Failed to load the pynode module into the Python interpreter")
         .ThrowAsJavaScriptException();
   }
 
+  pCurrentModule = ConvertBorrowedObjectToOwned(pPyNodeModule.get());
   /* Release the GIL. The other entry points back into Python re-acquire it */
   PyEval_SaveThread();
 
@@ -97,6 +99,7 @@ Napi::Value OpenFile(const Napi::CallbackInfo &info) {
       Napi::Error::New(env, "Failed to load python module")
           .ThrowAsJavaScriptException();
     }
+    pCurrentModule = std::move(pFile);
   }
 
   return env.Null();
@@ -174,7 +177,7 @@ Napi::Value Call(const Napi::CallbackInfo &info) {
   {
     py_ensure_gil ctx;
 
-    pFunc.reset(PyObject_GetAttrString(pModule.get(), functionName.c_str()));
+    pFunc.reset(PyObject_GetAttrString(pCurrentModule.get(), functionName.c_str()));
     int callable = PyCallable_Check(pFunc.get());
 
     if (pFunc != NULL && callable != 0) {
