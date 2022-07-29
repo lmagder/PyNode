@@ -3,26 +3,28 @@
 #include <iostream>
 #include <sstream>
 
-PyNodeWorker::PyNodeWorker(Napi::Function &callback, PyObject *pyArgs,
-                           PyObject *pFunc)
-    : Napi::AsyncWorker(callback), pyArgs(pyArgs), pFunc(pFunc){};
+PyNodeWorker::PyNodeWorker(Napi::Function &callback, py_object_owned&& pyArgs,
+                           py_object_owned&& pFunc)
+    : Napi::AsyncWorker(callback), pyArgs(std::move(pyArgs)), pFunc(std::move(pFunc)), pValue(nullptr){};
 PyNodeWorker::~PyNodeWorker(){};
 
 void PyNodeWorker::Execute() {
   {
     py_thread_context ctx;
 
-    pValue = PyObject_CallObject(pFunc, pyArgs);
-    Py_DECREF(pyArgs);
-    PyObject *errOccurred = PyErr_Occurred();
+    pValue.reset(PyObject_CallObject(pFunc.get(), pyArgs.get()));
+    pyArgs = nullptr;
+    pFunc = nullptr;
+
+    py_object_owned errOccurred(PyErr_Occurred());
 
     if (errOccurred != NULL) {
       std::string error;
-      PyObject *pType, *pValue, *pTraceback, *pTypeString;
+      PyObject *pType, *pValue, *pTraceback;
       PyErr_Fetch(&pType, &pValue, &pTraceback);
       const char *value = PyUnicode_AsUTF8(pValue);
-      pTypeString = PyObject_Str(pType);
-      const char *type = PyUnicode_AsUTF8(pTypeString);
+      py_object_owned pTypeString(PyObject_Str(pType));
+      const char *type = PyUnicode_AsUTF8(pTypeString.get());
       PyTracebackObject *tb = (PyTracebackObject *)pTraceback;
       _frame *frame = tb->tb_frame;
 
@@ -41,8 +43,6 @@ void PyNodeWorker::Execute() {
         frame = frame->f_back;
       }
 
-      Py_DecRef(errOccurred);
-      Py_DecRef(pTypeString);
       PyErr_Restore(pType, pValue, pTraceback);
       PyErr_Print();
       SetError(error);
@@ -57,12 +57,11 @@ void PyNodeWorker::OnOK() {
   std::vector<Napi::Value> result = {Env().Null(), Env().Null()};
 
   if (pValue != NULL) {
-    result[1] = ConvertFromPython(Env(), pValue);
-    Py_DECREF(pValue);
+    result[1] = ConvertFromPython(Env(), pValue.get());
+    pValue = nullptr;
   } else {
     std::string error;
     error.append("Function call failed");
-    Py_DECREF(pFunc);
     PyErr_Print();
 
     result[0] = Napi::Error::New(Env(), error).Value();

@@ -8,16 +8,16 @@
 
 class PyNodeWorker : public Napi::AsyncWorker {
 public:
-  PyNodeWorker(Napi::Function &callback, PyObject *pyArgs, PyObject *pFunc);
+  PyNodeWorker(Napi::Function &callback, py_object_owned&& pyArgs, py_object_owned&& pFunc);
   ~PyNodeWorker();
   void Execute();
   void OnOK();
   void OnError(const Napi::Error &e);
 
 private:
-  PyObject *pyArgs;
-  PyObject *pFunc;
-  PyObject *pValue;
+  py_object_owned pyArgs;
+  py_object_owned pFunc;
+  py_object_owned pValue;
 };
 
 #endif

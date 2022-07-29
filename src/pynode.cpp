@@ -8,7 +8,7 @@
 #include "jswrapper.h"
 #include <iostream>
 
-PyObject *pModule;
+py_object_owned pModule;
 
 Napi::Value StartInterpreter(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
@@ -34,10 +34,8 @@ Napi::Value StartInterpreter(const Napi::CallbackInfo &info) {
 
   /* Load PyNode's own module into Python. This makes WrappedJSObject instances
      behave better (eg, having attributes) */
-  PyObject *pName;
-  pName = PyUnicode_DecodeFSDefault("pynode");
-  pModule = PyImport_Import(pName);
-  Py_DECREF(pName);
+  py_object_owned pName(PyUnicode_DecodeFSDefault("pynode"));
+  pModule.reset(PyImport_Import(pName.get()));
   if (pModule == NULL) {
     PyErr_Print();
     Napi::Error::New(env, "Failed to load the pynode module into the Python interpreter")
@@ -90,12 +88,10 @@ Napi::Value OpenFile(const Napi::CallbackInfo &info) {
   {
     py_ensure_gil ctx;
 
-    PyObject *pName;
-    pName = PyUnicode_DecodeFSDefault(fileName.c_str());
-    pModule = PyImport_Import(pName);
-    Py_DECREF(pName);
+    py_object_owned pName(PyUnicode_DecodeFSDefault(fileName.c_str()));
+    py_object_owned pFile(PyImport_Import(pName.get()));
 
-    if (pModule == NULL) {
+    if (pFile == NULL) {
       PyErr_Print();
       std::cerr << "Failed to load module: " << fileName << std::endl;
       Napi::Error::New(env, "Failed to load python module")
@@ -115,15 +111,12 @@ Napi::Value ImportModule(const Napi::CallbackInfo &info) {
     return env.Null();
   }
 
-  std::string moduleName = info[0].As<Napi::String>().ToString();
+  std::string moduleName = info[0].As<Napi::String>();
 
   {
     py_ensure_gil ctx;
 
-    PyObject *pName;
-    pName = PyUnicode_FromString(moduleName.c_str());
-    PyObject *module_object = PyImport_Import(pName);
-    Py_DECREF(pName);
+    py_object_owned module_object(PyImport_ImportModule(moduleName.c_str()));
 
     if (module_object == NULL) {
       PyErr_Print();
@@ -131,7 +124,7 @@ Napi::Value ImportModule(const Napi::CallbackInfo &info) {
       Napi::Error::New(env, "Failed to load python module")
           .ThrowAsJavaScriptException();
     }
-    return ConvertFromPython(env, module_object);
+    return ConvertFromPython(env, module_object.get());
   }
 
   return env.Null();
@@ -146,7 +139,7 @@ Napi::Value Eval(const Napi::CallbackInfo &info) {
     return env.Null();
   }
 
-  std::string statement = info[0].As<Napi::String>().ToString();
+  std::string statement = info[0].As<Napi::String>();
   int response;
   {
     py_ensure_gil ctx;
@@ -176,16 +169,16 @@ Napi::Value Call(const Napi::CallbackInfo &info) {
 
   std::string functionName = info[0].As<Napi::String>().ToString();
 
-  PyObject *pFunc, *pArgs;
 
+  py_object_owned pArgs, pFunc;
   {
     py_ensure_gil ctx;
 
-    pFunc = PyObject_GetAttrString(pModule, functionName.c_str());
-    int callable = PyCallable_Check(pFunc);
+    pFunc.reset(PyObject_GetAttrString(pModule.get(), functionName.c_str()));
+    int callable = PyCallable_Check(pFunc.get());
 
-    if (pFunc != NULL && callable == 1) {
-      const int pythonArgsCount = Py_GetNumArguments(pFunc);
+    if (pFunc != NULL && callable != 0) {
+      const int pythonArgsCount = Py_GetNumArguments(pFunc.get());
       const int passedArgsCount = info.Length() - 2;
 
       // Check if the passed args length matches the python function args length
@@ -194,6 +187,7 @@ Napi::Value Call(const Napi::CallbackInfo &info) {
                           std::to_string(pythonArgsCount) + " arguments, " +
                           std::to_string(passedArgsCount) + " were passed");
         Napi::Error::New(env, error).ThrowAsJavaScriptException();
+
         return env.Null();
       }
 
@@ -208,7 +202,7 @@ Napi::Value Call(const Napi::CallbackInfo &info) {
   }
 
   Napi::Function cb = info[info.Length() - 1].As<Napi::Function>();
-  PyNodeWorker *pnw = new PyNodeWorker(cb, pArgs, pFunc);
+  PyNodeWorker *pnw = new PyNodeWorker(cb, std::move(pArgs), std::move(pFunc));
   pnw->Queue();
   return env.Null();
 }

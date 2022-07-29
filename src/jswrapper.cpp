@@ -11,8 +11,9 @@ typedef struct {
 } WrappedJSObject;
 
 static void
-WrappedJSObject_dealloc(WrappedJSObject *self)
+WrappedJSObject_dealloc(PyObject* obj)
 {
+    WrappedJSObject *self = (WrappedJSObject *)obj;
     if (self->object_reference != NULL) {
         napi_delete_reference(self->env, self->object_reference);
         self->object_reference = NULL;
@@ -50,7 +51,7 @@ WrappedJSObject_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
 }
 
 static int
-WrappedJSObject_init(WrappedJSObject *self, PyObject *args, PyObject *kwds)
+WrappedJSObject_init(PyObject *self, PyObject *args, PyObject *kwds)
 {
     if (!PyArg_ParseTuple(args, ""))
         return -1;
@@ -61,17 +62,7 @@ static PyMemberDef WrappedJSObject_members[] = {
     {NULL}  /* Sentinel */
 };
 
-static PyObject *
-WrappedJSObject_something(WrappedJSObject *self, PyObject *unused)
-{
-    //self->state++;
-    //return PyLong_FromLong(self->state);
-    return PyLong_FromLong(47.0);
-}
-
 static PyMethodDef WrappedJSObject_methods[] = {
-    {"something", (PyCFunction) WrappedJSObject_something, METH_NOARGS,
-     PyDoc_STR("Do something?")},
     {NULL}, /* Sentinel */
 };
 
@@ -92,77 +83,61 @@ WrappedJSObject_getattro(PyObject *_self, PyObject *attr)
         napi_typeof(self->env, result, &type);
         isfunc = (type == napi_function);
 
-        PyObject *pyval = convert_napi_value_to_python(self->env, result);
+        py_object_owned pyval = convert_napi_value_to_python(self->env, result);
         if (pyval != NULL) {
             if (isfunc) {
                 /* "bind" the method to its instance */
-                ((WrappedJSObject *)pyval)->bound = wrapped;
+                ((WrappedJSObject *)pyval.get())->bound = wrapped;
             }
-            return pyval;
+            return pyval.release();
         }
     }
     PyErr_SetObject(PyExc_AttributeError, attr);
-    return NULL;
+    Py_RETURN_NONE;
 }
 
 static PyObject *
 WrappedJSObject_call(PyObject *_self, PyObject *args, PyObject *kwargs)
 {
     WrappedJSObject *self = (WrappedJSObject*)_self;
-    PyObject * ret = NULL;
-    PyObject * seq;
-    Py_ssize_t len = 0, i;
-    napi_value result;
-    napi_value this;
-    napi_status status;
-    napi_value wrapped;
-    napi_value * jsargs = NULL;
 
-    seq = PySequence_Fast(args, "*args must be a sequence");
-    len = PySequence_Size(args);
-    jsargs = calloc(len, sizeof(napi_value));
-    if (jsargs == NULL) {
-        PyErr_SetString(PyExc_MemoryError, "Out of memory allocating JS args array");
-        goto finally;
-    }
-    for (i = 0; i < len; i++) {
-        PyObject *arg = PySequence_Fast_GET_ITEM(seq, i);
+    py_object_owned seq(PySequence_Fast(args, "*args must be a sequence"));
+    Py_ssize_t len = PySequence_Size(args);
+    auto jsargs = std::make_unique<napi_value[]>(len);
+    for (Py_ssize_t i = 0; i < len; i++) {
+        PyObject *arg = PySequence_Fast_GET_ITEM(seq.get(), i);
         napi_value jsarg = convert_python_to_napi_value(self->env, arg);
         jsargs[i] = jsarg;
     }
-    Py_DECREF(seq);
 
+    napi_value wrapped;
     napi_get_reference_value(self->env, self->object_reference, &wrapped);
 
+    napi_value thisPtr = nullptr;
     if (self->bound != NULL) {
-        this = self->bound;
+        thisPtr = self->bound;
     } else {
-        status = napi_get_global(self->env, &this);
+        auto status = napi_get_global(self->env, &thisPtr);
         if (status != napi_ok) {
             PyErr_SetString(PyExc_RuntimeError, "Error getting JS global environment");
-            goto finally;
+            Py_RETURN_NONE;
         }
     }
 
-    status = napi_call_function(self->env, this, wrapped, len, jsargs, &result);
+    napi_value result;
+    auto status = napi_call_function(self->env, thisPtr, wrapped, len, jsargs.get(), &result);
     if (status != napi_ok) {
         PyErr_SetString(PyExc_RuntimeError, "Error calling javascript function");
-        goto finally;
+        Py_RETURN_NONE;
     }
 
-    PyObject *pyval = convert_napi_value_to_python(self->env, result);
+    py_object_owned pyval = convert_napi_value_to_python(self->env, result);
     if (pyval == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "Error converting JS return value to Python");
-        goto finally;
+        Py_RETURN_NONE;
     }
-    ret = pyval;
 
-finally:
-    if (jsargs != NULL) {
-        free(jsargs);
-        jsargs = NULL;
-    }
-    return ret;
+    return pyval.release();
 }
 
 PyObject * WrappedJSObject_str(PyObject *_self) {
@@ -187,72 +162,65 @@ PyObject * WrappedJSObject_str(PyObject *_self) {
     }
 
     /* Result should just be a JavaScript string at this point */
-    PyObject *pyval = convert_napi_value_to_python(self->env, result);
+    py_object_owned pyval = convert_napi_value_to_python(self->env, result);
     if (pyval == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "Error converting JavaScript ToString item to Python");
         Py_RETURN_NONE;
     }
-    return pyval;
+    return pyval.release();
 }
 
 PyTypeObject WrappedJSType = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name = "pynode.WrappedJSObject",
-    .tp_doc = "A JavaScript object",
-    .tp_basicsize = sizeof(WrappedJSObject),
-    .tp_itemsize = 0,
-    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
-    .tp_new = WrappedJSObject_new,
-    .tp_init = (initproc) WrappedJSObject_init,
-    .tp_dealloc = (destructor) WrappedJSObject_dealloc,
-    .tp_members = WrappedJSObject_members,
-    .tp_methods = WrappedJSObject_methods,
-    .tp_call = WrappedJSObject_call,
-    .tp_getattro = WrappedJSObject_getattro,
-    .tp_str = WrappedJSObject_str,
 };
 
 PyObject *WrappedJSObject_New(napi_env env, napi_value value) {
-    /* Pass an empty argument list */
-    PyObject *argList = Py_BuildValue("()");
-
     /* Call the class object. */
-    PyObject *obj = PyObject_CallObject((PyObject *) &WrappedJSType, argList);
+    py_object_owned obj(PyObject_CallNoArgs((PyObject *)&WrappedJSType));
     if (obj == NULL) {
         PyErr_Print();
     }
 
-    /* Release the argument list. */
-    Py_DECREF(argList);
-
-    WrappedJSObject_assign_napi_value((WrappedJSObject*)obj, env, value);
-    return obj;
+    WrappedJSObject_assign_napi_value((WrappedJSObject*)obj.get(), env, value);
+    return obj.release();
 }
 
 static PyModuleDef pynodemodule = {
     PyModuleDef_HEAD_INIT,
-    .m_name = "pynode",
-    .m_doc = "Python <3 JavaScript.",
-    .m_size = -1,
 };
 
 PyMODINIT_FUNC
 PyInit_jswrapper(void)
 {
-    PyObject *m;
+
+    WrappedJSType.tp_name = "pynode.WrappedJSObject";
+    WrappedJSType.tp_doc = "A JavaScript object";
+    WrappedJSType.tp_basicsize = sizeof(WrappedJSObject);
+    WrappedJSType.tp_itemsize = 0;
+    WrappedJSType.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE;
+    WrappedJSType.tp_new = WrappedJSObject_new;
+    WrappedJSType.tp_init = WrappedJSObject_init;
+    WrappedJSType.tp_dealloc = WrappedJSObject_dealloc;
+    WrappedJSType.tp_members = WrappedJSObject_members;
+    WrappedJSType.tp_methods = WrappedJSObject_methods;
+    WrappedJSType.tp_call = WrappedJSObject_call;
+    WrappedJSType.tp_getattro = WrappedJSObject_getattro;
+    WrappedJSType.tp_str = WrappedJSObject_str;
+
+    pynodemodule.m_name = "pynode";
+    pynodemodule.m_doc = "Python <3 JavaScript.";
+    pynodemodule.m_size = -1;
+
     if (PyType_Ready(&WrappedJSType) < 0)
         return NULL;
 
-    m = PyModule_Create(&pynodemodule);
+    py_object_owned m(PyModule_Create(&pynodemodule));
     if (m == NULL)
         return NULL;
 
-    Py_INCREF(&WrappedJSType);
-    if (PyModule_AddObject(m, "WrappedJSObject", (PyObject *) &WrappedJSType) < 0) {
-        Py_DECREF(&WrappedJSType);
-        Py_DECREF(m);
+    if (PyModule_AddObject(m.get(), "WrappedJSObject", (PyObject *) &WrappedJSType) < 0) {
         return NULL;
     }
 
-    return m;
+    return m.release();
 }

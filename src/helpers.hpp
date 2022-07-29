@@ -1,10 +1,25 @@
 #ifndef PYNODE_HELPERS_HPP
 #define PYNODE_HELPERS_HPP
 
+#include <memory>
 #include "napi.h"
+#include <Python.h>
+
+struct PyObjectDeleter {
+  void operator()(PyObject* b) { Py_XDECREF(b); }
+};
+
+using py_object_owned = std::unique_ptr<PyObject, PyObjectDeleter>;
+
+inline py_object_owned ConvertBorrowedObjectToOwned(PyObject* o)
+{
+  Py_XINCREF(o);
+  return py_object_owned(o);
+}
+
 #include "pywrapper.hpp"
 #include "helpers.h"
-#include <Python.h>
+
 
 /* entry points to threads should grab a py_thread_context for the duration of the thread */
 class py_thread_context {
@@ -38,11 +53,11 @@ private:
 };
 
 // v8 to Python
-PyObject *BuildPyArray(Napi::Env env, Napi::Value arg);
-PyObject *BuildPyDict(Napi::Env env, Napi::Value arg);
-PyObject *BuildWrappedJSObject(Napi::Env env, Napi::Value arg);
-PyObject *BuildPyArgs(const Napi::CallbackInfo &info, size_t start_index, size_t count);
-PyObject *ConvertToPython(Napi::Value);
+py_object_owned BuildPyArray(Napi::Env env, Napi::Value arg);
+py_object_owned BuildPyDict(Napi::Env env, Napi::Value arg);
+py_object_owned BuildWrappedJSObject(Napi::Env env, Napi::Value arg);
+py_object_owned BuildPyArgs(const Napi::CallbackInfo &info, size_t start_index, size_t count);
+py_object_owned ConvertToPython(Napi::Value);
 
 // Python to v8
 Napi::Array BuildV8Array(Napi::Env env, PyObject *obj);
@@ -50,5 +65,8 @@ Napi::Object BuildV8Dict(Napi::Env env, PyObject *obj);
 Napi::Value ConvertFromPython(Napi::Env env, PyObject *obj);
 
 int Py_GetNumArguments(PyObject *pFunc);
+
+py_object_owned convert_napi_value_to_python(napi_env, napi_value);
+napi_value convert_python_to_napi_value(napi_env, PyObject *);
 
 #endif

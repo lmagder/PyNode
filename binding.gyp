@@ -8,7 +8,7 @@
         "src/pynode.cpp",
         "src/worker.cpp",
         "src/pywrapper.cpp",
-        "src/jswrapper.c"
+        "src/jswrapper.cpp"
       ],
       'include_dirs': [
         "<!@(node -p \"require('node-addon-api').include\")"
