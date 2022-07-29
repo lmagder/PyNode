@@ -40,7 +40,7 @@ bool isNapiValuePlainObject(Napi::Env &env, Napi::Value &obj) {
 }
 
 bool isNapiValueWrappedPython(Napi::Env &env, Napi::Object obj) {
-    return obj.InstanceOf(PyNodeWrappedPythonObject::constructor.Value());
+    return obj.InstanceOf(env.GetInstanceData<Napi::FunctionReference>()->Value());
 }
 
 int Py_GetNumArguments(PyObject *pFunc) {
@@ -227,8 +227,7 @@ Napi::Value ConvertFromPython(Napi::Env env, PyObject * pValue) {
       result = obj;
     } else {
       auto exp = Napi::External<PyObject>::New(env, pValue);
-      auto obj = PyNodeWrappedPythonObject::constructor.New({exp});
-      result = obj;
+      result = env.GetInstanceData<Napi::FunctionReference>()->New({exp});
     }
     return result;
 }

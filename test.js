@@ -45,6 +45,16 @@ describe('nodePython', () => {
         })
     })
 
+    it('should return the custom type', done => {
+      call('return_class_object')
+        .then(result => {
+          expect(result.constructor.name).to.equal('PyNodeWrappedPythonObject')
+          expect(result.pytype).to.equal('Test')
+          done()
+        })
+    })
+
+
     it('should return the time series data', done => {
       call('time_series_data')
         .then(result => {

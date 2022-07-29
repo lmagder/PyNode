@@ -44,7 +44,12 @@ void PyNodeWorker::Execute() {
 
       PyErr_Restore(pType, pValue, pTraceback);
       PyErr_Print();
+      pValue = nullptr;
       SetError(error);
+    }
+    else if (!pValue)
+    {
+        SetError("Function call failed");
     }
 
     pFunc = nullptr;
@@ -54,21 +59,8 @@ void PyNodeWorker::Execute() {
 
 void PyNodeWorker::OnOK() {
   py_thread_context ctx;
-  Napi::HandleScope scope(Env());
-
-  std::vector<Napi::Value> result = {Env().Null(), Env().Null()};
-
-  if (pValue != NULL) {
-    result[1] = ConvertFromPython(Env(), pValue.get());
-    pValue = nullptr;
-  } else {
-    std::string error;
-    error.append("Function call failed");
-    PyErr_Print();
-
-    result[0] = Napi::Error::New(Env(), error).Value();
-  }
-  Callback().Call({result[0], result[1]});
+  Callback().Call({ Env().Null(), ConvertFromPython(Env(), pValue.get()) });
+  pValue = nullptr;
 }
 
 void PyNodeWorker::OnError(const Napi::Error &e) {

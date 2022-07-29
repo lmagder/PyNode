@@ -9,11 +9,12 @@ class PyNodeWrappedPythonObject : public Napi::ObjectWrap<PyNodeWrappedPythonObj
   public:
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
     PyNodeWrappedPythonObject(const Napi::CallbackInfo &info);
-    static Napi::FunctionReference constructor;
+    ~PyNodeWrappedPythonObject();
     Napi::Value Call(const Napi::CallbackInfo &info);
     Napi::Value GetAttr(const Napi::CallbackInfo &info);
     Napi::Value SetAttr(const Napi::CallbackInfo &info);
     Napi::Value Repr(const Napi::CallbackInfo &info);
+    Napi::Value GetPyType(const Napi::CallbackInfo& info);
     PyObject * getValue() { return _value.get(); };
 
   private:

@@ -8,17 +8,13 @@ Napi::Object PyNodeWrappedPythonObject::Init(Napi::Env env, Napi::Object exports
         InstanceMethod("call", &PyNodeWrappedPythonObject::Call),
         InstanceMethod("get", &PyNodeWrappedPythonObject::GetAttr),
         InstanceMethod("set", &PyNodeWrappedPythonObject::SetAttr),
-        InstanceMethod("repr", &PyNodeWrappedPythonObject::Repr)
+        InstanceMethod("repr", &PyNodeWrappedPythonObject::Repr),
+        InstanceAccessor<&PyNodeWrappedPythonObject::GetPyType>("pytype"),
     });
 
-    // Create a peristent reference to the class constructor. This will allow
-    // a function called on a class prototype and a function
-    // called on instance of a class to be distinguished from each other.
-    constructor = Napi::Persistent(func);
-    // Call the SuppressDestruct() method on the static data prevent the calling
-    // to this destructor to reset the reference when the environment is no longer
-    // available.
-    constructor.SuppressDestruct();
+    Napi::FunctionReference* constructor = new Napi::FunctionReference();
+    *constructor = Napi::Persistent(func);
+    env.SetInstanceData(constructor);
     exports.Set("PyNodeWrappedPythonObject", func);
     return exports;
 }
@@ -27,7 +23,11 @@ PyNodeWrappedPythonObject::PyNodeWrappedPythonObject(const Napi::CallbackInfo &i
     _value = ConvertBorrowedObjectToOwned(info[0].As<Napi::External<PyObject>>().Data());
 }
 
-Napi::FunctionReference PyNodeWrappedPythonObject::constructor;
+PyNodeWrappedPythonObject::~PyNodeWrappedPythonObject()
+{
+    py_ensure_gil ctx;
+    _value = nullptr;
+}
 
 Napi::Value PyNodeWrappedPythonObject::GetAttr(const Napi::CallbackInfo &info){
     py_ensure_gil ctx;
@@ -97,5 +97,11 @@ Napi::Value PyNodeWrappedPythonObject::Repr(const Napi::CallbackInfo &info){
     const char * repr_c = PyUnicode_AsUTF8(repr.get());
     Napi::Value result = Napi::String::New(env, repr_c); // (Napi takes ownership of repr_c)
     return result;
+}
+
+Napi::Value PyNodeWrappedPythonObject::GetPyType(const Napi::CallbackInfo& info)
+{
+    Napi::Env env = info.Env();
+    return Napi::String::New(env, Py_TYPE(_value.get())->tp_name);
 }
 
