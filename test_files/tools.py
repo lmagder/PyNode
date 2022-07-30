@@ -46,7 +46,8 @@ def causes_runtime_error():
   second = 2
   return first + secon
 
+class Test:
+  pass
+
 def return_class_object():
-  class Test:
-    pass
   return Test()

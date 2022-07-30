@@ -102,6 +102,18 @@ Napi::Value PyNodeWrappedPythonObject::Repr(const Napi::CallbackInfo &info){
 Napi::Value PyNodeWrappedPythonObject::GetPyType(const Napi::CallbackInfo& info)
 {
     Napi::Env env = info.Env();
-    return Napi::String::New(env, Py_TYPE(_value.get())->tp_name);
+#if PY_VERSION_HEX >= 0x030B0000
+    py_object_owned nameStr(PyType_GetQualName(Py_TYPE(_value.get())));
+    return Napi::String::New(env, PyUnicode_AsUTF8(nameStr.get()));
+#else
+    auto type = Py_TYPE(_value.get());
+    if (type->tp_flags & Py_TPFLAGS_HEAPTYPE) {
+        PyHeapTypeObject* et = (PyHeapTypeObject*)type;
+        return Napi::String::New(env, PyUnicode_AsUTF8(et->ht_qualname));
+    }
+    else {
+        return Napi::String::New(env, type->tp_name);
+    }
+#endif
 }
 
