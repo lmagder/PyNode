@@ -51,3 +51,8 @@ class Test:
 
 def return_class_object():
   return Test()
+
+same_object = Test()
+def return_same_object():
+  return same_object
+  

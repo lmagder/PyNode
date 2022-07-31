@@ -54,6 +54,28 @@ describe('nodePython', () => {
         })
     })
 
+    it('should return the same object', done => {
+      call('return_same_object')
+        .then(result1 => {
+          call('return_same_object')
+            .then(result2 => {
+              expect(result2).to.equal(result1)
+              done()
+            })
+        })
+    })
+
+    it('should return different objects', done => {
+      call('return_class_object')
+        .then(result1 => {
+          call('return_class_object')
+            .then(result2 => {
+              expect(result2).to.not.equal(result1)
+              done()
+            })
+        })
+    })
+
 
     it('should return the time series data', done => {
       call('time_series_data')

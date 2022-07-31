@@ -17,10 +17,6 @@ inline py_object_owned ConvertBorrowedObjectToOwned(PyObject* o)
   return py_object_owned(o);
 }
 
-#include "pywrapper.hpp"
-#include "helpers.h"
-
-
 /* entry points to threads should grab a py_thread_context for the duration of the thread */
 class py_thread_context {
 public:
@@ -55,7 +51,7 @@ private:
 // v8 to Python
 py_object_owned BuildPyArray(Napi::Env env, Napi::Value arg);
 py_object_owned BuildPyDict(Napi::Env env, Napi::Value arg);
-py_object_owned BuildWrappedJSObject(Napi::Env env, Napi::Value arg);
+py_object_owned BuildWrappedJSObject(Napi::Object arg);
 py_object_owned BuildPyArgs(const Napi::CallbackInfo &info, size_t start_index, size_t count);
 py_object_owned ConvertToPython(Napi::Value);
 
@@ -65,8 +61,5 @@ Napi::Object BuildV8Dict(Napi::Env env, PyObject *obj);
 Napi::Value ConvertFromPython(Napi::Env env, PyObject *obj);
 
 int Py_GetNumArguments(PyObject *pFunc);
-
-py_object_owned convert_napi_value_to_python(napi_env, napi_value);
-napi_value convert_python_to_napi_value(napi_env, PyObject *);
 
 #endif

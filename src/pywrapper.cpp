@@ -1,4 +1,5 @@
 #include "pywrapper.hpp"
+#include "pynode.hpp"
 #include <napi.h>
 #include <iostream>
 
@@ -12,9 +13,8 @@ Napi::Object PyNodeWrappedPythonObject::Init(Napi::Env env, Napi::Object exports
         InstanceAccessor<&PyNodeWrappedPythonObject::GetPyType>("pytype"),
     });
 
-    Napi::FunctionReference* constructor = new Napi::FunctionReference();
-    *constructor = Napi::Persistent(func);
-    env.SetInstanceData(constructor);
+    auto instData = env.GetInstanceData<PyNodeEnvData>();
+    instData->PyNodeWrappedPythonObjectConstructor = Napi::Persistent(func);
     exports.Set("PyNodeWrappedPythonObject", func);
     return exports;
 }

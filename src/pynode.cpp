@@ -5,7 +5,7 @@
 #include "helpers.hpp"
 #include "worker.hpp"
 #include "pywrapper.hpp"
-#include "jswrapper.h"
+#include "jswrapper.hpp"
 #include <iostream>
 
 py_object_owned pPyNodeModule;
@@ -212,6 +212,8 @@ Napi::Value Call(const Napi::CallbackInfo &info) {
 
 Napi::Object PyNodeInit(Napi::Env env, Napi::Object exports) {
 
+  env.SetInstanceData(new PyNodeEnvData());
+  
   exports.Set(Napi::String::New(env, "startInterpreter"),
               Napi::Function::New(env, StartInterpreter));
 
