@@ -47,7 +47,11 @@ def causes_runtime_error():
   return first + secon
 
 class Test:
-  pass
+  def __init__(self):
+    self.v = "Test string"
+
+  def t(self):
+    return self.v
 
 def return_class_object():
   return Test()

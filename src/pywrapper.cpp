@@ -71,7 +71,7 @@ Napi::Value PyNodeWrappedPythonObject::Call(const Napi::CallbackInfo &info){
         return env.Null();
     }
     py_object_owned pArgs = BuildPyArgs(info, 0, info.Length());
-    py_object_owned pReturnValue(PyObject_Call(_value.get(), pArgs.get(), NULL));
+    py_object_owned pReturnValue(PyObject_CallObject(_value.get(), pArgs.get()));
     PyObject *error_occurred = PyErr_Occurred();
     if (error_occurred != NULL) {
         // TODO - get the traceback string into Javascript

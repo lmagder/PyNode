@@ -76,6 +76,13 @@ describe('nodePython', () => {
         })
     })
 
+    it('should return a valid string', done => {
+      const t = nodePython.import("tools").get('Test').call();
+      expect(t.get("v")).to.equal("Test string")
+      expect(t.get("t").call()).to.equal("Test string")
+      done() 
+    })
+
 
     it('should return the time series data', done => {
       call('time_series_data')
