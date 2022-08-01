@@ -1,6 +1,6 @@
 # PyNode
 
-[![Build Status](https://travis-ci.org/fridgerator/PyNode.svg?branch=master)](https://travis-ci.org/fridgerator/PyNode)
+** Forked from https://github.com/fridgerator/PyNode **
 	
 ### Call python code from node.js
 

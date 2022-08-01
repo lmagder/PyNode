@@ -1,5 +1,5 @@
-const { parentPort } = require('worker_threads')
-const pynode = require('./build/Release/PyNode')
+import { parentPort } from 'worker_threads'
+import { pynode } from "./index.js"
 
 const longRunningFunction = () => {
   return new Promise((resolve, reject) => {

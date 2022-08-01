@@ -1,11 +1,9 @@
 {
-  "name": "@fridgerator/pynode",
-  "version": "0.5.2",
+  "name": "@lmagder/pynode",
+  "version": "0.6.0",
   "description": "Node <-> Python interopability",
-  "main": "build/Release/PyNode",
-  "author": "Nick Franken <shnick@gmail.com>",
   "license": "MIT",
-  "homepage": "https://github.com/fridgerator/PyNode",
+  "homepage": "https://github.com/lmagder/PyNode",
   "keywords": [
     "node.js",
     "python"
@@ -25,6 +23,8 @@
   },
   "gypfile": true,
   "types": "index.d.ts",
+  "exports": "./index.js",
+  "type": "module",
   "engines": {
     "node": ">=10"
   }

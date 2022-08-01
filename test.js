@@ -1,8 +1,7 @@
-const chai = require('chai')
-const expect = chai.expect
-
-const nodePython = require('./build/Release/PyNode')
-const { promisify } = require('util')
+import { expect } from "chai"
+import { pynode } from "./index.js"
+import { promisify } from "util"
+const nodePython = pynode
 
 nodePython.startInterpreter()
 nodePython.appendSysPath('./test_files')

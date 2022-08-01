@@ -1,4 +1,4 @@
-const { Worker, isMainThread, parentPort, workerData } = require('worker_threads')
+import { Worker, isMainThread, parentPort, workerData } from 'worker_threads'
 
 const TIMEOUT = 1000
 
