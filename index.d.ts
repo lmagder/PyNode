@@ -17,7 +17,7 @@ declare module "@lmagder/pynode" {
     readonly call: (method: string, ...args: [...PyNodeValue[], (error: string | null, result: PyNodeValue) => void]) => void;
   };
 
-  const pynode: PyNode;
+  export const pynode: PyNode;
 
   export default pynode;
 }
