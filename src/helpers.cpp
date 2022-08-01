@@ -234,29 +234,21 @@ Napi::Value ConvertFromPython(Napi::Env env, PyObject* pValue) {
 		result = obj;
 	}
 	else {
-		static auto attrName = py_object_owned(PyUnicode_FromString("__pynode__"));
-		py_object_owned existingWrapper(PyObject_HasAttr(pValue, attrName.get()) ? PyObject_GenericGetAttr(pValue, attrName.get()) : nullptr);
-		result = ExistingPyWrapper_get_napi_value(existingWrapper.get());
-		if (!result)
+		
+		auto instData = env.GetInstanceData<PyNodeEnvData>();
+		auto findIt = instData->objectMappings.find(pValue);
+		Napi::Object obj = findIt == instData->objectMappings.end() ? Napi::Object() : findIt->second.existingJSObject.Value();
+		if (!obj)
 		{
 			auto exp = Napi::External<PyObject>::New(env, pValue);
-			auto obj = env.GetInstanceData<PyNodeEnvData>()->PyNodeWrappedPythonObjectConstructor.New({ exp });
-			if (!PyMethod_Check(pValue) && !PyInstanceMethod_Check(pValue))  {
-				PyObject_GenericSetAttr(pValue, attrName.get(), ExistingPyWrapper_New(obj));
-			}
-
-			PyObject* error_occurred = PyErr_Occurred();
-			if (error_occurred != NULL) {
-				std::string error("A Python error occurred.");
-				PyErr_Print();
-				Napi::Error::New(env, error).ThrowAsJavaScriptException();
-				result = env.Null();
-			}
-			else {
-
-				result = obj;
-			}
+			obj = instData->PyNodeWrappedPythonObjectConstructor.New({ exp });
+			auto mappingIt = instData->objectMappings.insert_or_assign(pValue, PyNodeEnvData::WeakRef()).first;
+			auto& mapping = mappingIt->second;
+			mapping.existingJSObject = Napi::Weak(obj);
+			mapping.pyWeakRef.reset(PyWeakref_NewRef(pValue, WeakRefCleanupFunc));
+			instData->weakRefToSlot[mapping.pyWeakRef.get()] = mappingIt;
 		}
+		result = obj;
 	}
 	return result;
 }

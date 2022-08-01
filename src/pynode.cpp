@@ -8,8 +8,7 @@
 #include "jswrapper.hpp"
 #include <iostream>
 
-py_object_owned pPyNodeModule;
-py_object_owned pCurrentModule;
+std::unordered_set<PyNodeEnvData*> PyNodeEnvData::s_envData;
 
 Napi::Value StartInterpreter(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
@@ -33,17 +32,18 @@ Napi::Value StartInterpreter(const Napi::CallbackInfo &info) {
 
   Py_Initialize();
 
+  auto instData = env.GetInstanceData<PyNodeEnvData>();
   /* Load PyNode's own module into Python. This makes WrappedJSObject instances
      behave better (eg, having attributes) */
   py_object_owned pName(PyUnicode_DecodeFSDefault("pynode"));
-  pPyNodeModule.reset(PyImport_Import(pName.get()));
-  if (pPyNodeModule == NULL) {
+  instData->pPyNodeModule.reset(PyImport_Import(pName.get()));
+  if (instData->pPyNodeModule == NULL) {
     PyErr_Print();
     Napi::Error::New(env, "Failed to load the pynode module into the Python interpreter")
         .ThrowAsJavaScriptException();
   }
 
-  pCurrentModule = ConvertBorrowedObjectToOwned(pPyNodeModule.get());
+  instData->pCurrentModule = ConvertBorrowedObjectToOwned(instData->pPyNodeModule.get());
   /* Release the GIL. The other entry points back into Python re-acquire it */
   PyEval_SaveThread();
 
@@ -99,7 +99,8 @@ Napi::Value OpenFile(const Napi::CallbackInfo &info) {
       Napi::Error::New(env, "Failed to load python module")
           .ThrowAsJavaScriptException();
     }
-    pCurrentModule = std::move(pFile);
+    auto instData = env.GetInstanceData<PyNodeEnvData>();
+    instData->pCurrentModule = std::move(pFile);
   }
 
   return env.Null();
@@ -176,8 +177,8 @@ Napi::Value Call(const Napi::CallbackInfo &info) {
   py_object_owned pArgs, pFunc;
   {
     py_ensure_gil ctx;
-
-    pFunc.reset(PyObject_GetAttrString(pCurrentModule.get(), functionName.c_str()));
+    auto instData = env.GetInstanceData<PyNodeEnvData>();
+    pFunc.reset(PyObject_GetAttrString(instData->pCurrentModule.get(), functionName.c_str()));
     int callable = PyCallable_Check(pFunc.get());
 
     if (pFunc != NULL && callable != 0) {

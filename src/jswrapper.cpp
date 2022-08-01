@@ -1,6 +1,7 @@
 #define PY_SSIZE_T_CLEAN
 #include "jswrapper.hpp"
 #include "helpers.hpp"
+#include "pynode.hpp"
 #include <structmember.h>
 #include <optional>
 #include "napi.h"
@@ -57,8 +58,6 @@ WrappedJSObject_getattro(PyObject *_self, PyObject *attr)
     WrappedJSObject *self = (WrappedJSObject*)_self;
     auto env = self->cpp.object_reference.Env();
     auto wrapped = self->cpp.object_reference.Value();
-    napi_valuetype type;
-    bool hasattr;
     const char * utf8name = PyUnicode_AsUTF8(attr);
     if (wrapped.Has(utf8name)) {
         auto result = wrapped.Get(utf8name);
@@ -133,10 +132,6 @@ PyTypeObject WrappedJSType = {
     PyVarObject_HEAD_INIT(NULL, 0)
 };
 
-PyTypeObject ExistingPyWrapperType = {
-    PyVarObject_HEAD_INIT(NULL, 0)
-};
-
 PyObject *WrappedJSObject_New(Napi::Object value) {
     /* Call the class object. */
     py_object_owned obj(PyObject_CallNoArgs((PyObject *)&WrappedJSType));
@@ -151,18 +146,6 @@ PyObject *WrappedJSObject_New(Napi::Object value) {
     return obj.release();
 }
 
-PyObject* ExistingPyWrapper_New(Napi::Object value) {
-    py_object_owned obj(PyObject_CallNoArgs((PyObject*)&ExistingPyWrapperType));
-    if (!obj) {
-        PyErr_Print();
-        Py_RETURN_NONE;
-    }
-
-    auto self = ((WrappedJSObject*)obj.get());
-    self->cpp.object_reference = Napi::Weak(value);
-
-    return obj.release();
-}
 
 Napi::Object WrappedJSObject_get_napi_value(PyObject* s) {
     if (s && Py_IS_TYPE(s, &WrappedJSType))
@@ -173,18 +156,26 @@ Napi::Object WrappedJSObject_get_napi_value(PyObject* s) {
     return {};
 }
 
-Napi::Object ExistingPyWrapper_get_napi_value(PyObject* s) {
-    if (s && Py_IS_TYPE(s, &ExistingPyWrapperType))
-    {
-        WrappedJSObject* self = (WrappedJSObject*)s;
-        return self->cpp.object_reference.Value();
-    }
-    return {};
-}
-
 static PyModuleDef pynodemodule = {
     PyModuleDef_HEAD_INIT,
 };
+
+static PyMethodDef weakRefCleanupFuncMethodDef = {
+        "__pynode_gc_cleanup__",
+        [](PyObject* self, PyObject* arg) {
+
+            for (auto env : PyNodeEnvData::s_envData) {
+                if (auto node = env->weakRefToSlot.extract(arg))  {
+                    env->objectMappings.erase(node.mapped());
+                }
+            }
+            Py_RETURN_NONE;
+        },
+        METH_O,
+        nullptr,
+};
+
+PyObject* WeakRefCleanupFunc = nullptr;
 
 PyMODINIT_FUNC
 PyInit_jswrapper(void)
@@ -204,17 +195,6 @@ PyInit_jswrapper(void)
     WrappedJSType.tp_getattro = WrappedJSObject_getattro;
     WrappedJSType.tp_str = WrappedJSObject_str;
 
-
-    ExistingPyWrapperType.tp_name = "pynode.ExistingPyWrapperType";
-    ExistingPyWrapperType.tp_basicsize = sizeof(WrappedJSObject);
-    ExistingPyWrapperType.tp_itemsize = 0;
-    ExistingPyWrapperType.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE;
-    ExistingPyWrapperType.tp_new = WrappedJSObject_new;
-    ExistingPyWrapperType.tp_init = WrappedJSObject_init;
-    ExistingPyWrapperType.tp_dealloc = WrappedJSObject_dealloc;
-    ExistingPyWrapperType.tp_members = WrappedJSObject_members;
-    ExistingPyWrapperType.tp_methods = WrappedJSObject_methods;
-
     pynodemodule.m_name = "pynode";
     pynodemodule.m_doc = "Python <3 JavaScript.";
     pynodemodule.m_size = -1;
@@ -222,20 +202,23 @@ PyInit_jswrapper(void)
     if (PyType_Ready(&WrappedJSType) < 0)
         return NULL;
 
-    if (PyType_Ready(&ExistingPyWrapperType) < 0)
-        return NULL;
-
     py_object_owned m(PyModule_Create(&pynodemodule));
     if (m == NULL)
         return NULL;
+
+
+    
+    py_object_owned f(PyCFunction_New(&weakRefCleanupFuncMethodDef, nullptr));
 
     if (PyModule_AddObject(m.get(), "WrappedJSObject", (PyObject *) &WrappedJSType) < 0) {
         return NULL;
     }
 
-    if (PyModule_AddObject(m.get(), "ExistingPyWrapperType", (PyObject*)&ExistingPyWrapperType) < 0) {
+    if (PyModule_AddObjectRef(m.get(), weakRefCleanupFuncMethodDef.ml_name, f.get()) < 0) {
         return NULL;
     }
+
+    WeakRefCleanupFunc = f.get();
 
     return m.release();
 }
