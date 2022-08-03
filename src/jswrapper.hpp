@@ -2,7 +2,7 @@
 #define PYNODE_JSWRAPPER_HPP
 
 #include <Python.h>
-#include <Napi.h>
+#include "napi.h"
 #include "helpers.hpp"
 
 PyMODINIT_FUNC PyInit_jswrapper(void);

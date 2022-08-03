@@ -47,9 +47,10 @@
           }
         }],
         ['OS!="win"', {
+          'cflags+': ['-Wno-missing-field-initializers'],
           "variables": {
-            "PY_INCLUDE%": "<!(if [ -z \"$PY_INCLUDE\" ]; then echo $(\"%PYTHON%\" build_include.py); else echo $PY_INCLUDE; fi)",
-            "PY_LIBS%": "<!(if [ -z \"$PY_LIBS\" ]; then echo $(\"%PYTHON%\" build_ldflags.py); else echo $PY_LIBS; fi)"
+            "PY_INCLUDE%": "<!(if [ -z \"$PY_INCLUDE\" ]; then echo $(\"$PYTHON\" build_include.py); else echo $PY_INCLUDE; fi)",
+            "PY_LIBS%": "<!(if [ -z \"$PY_LIBS\" ]; then echo $(\"$PYTHON\" build_ldflags.py); else echo $PY_LIBS; fi)"
           },
           "include_dirs": [
             "<(PY_INCLUDE)"

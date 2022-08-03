@@ -44,19 +44,10 @@ WrappedJSObject_init(PyObject *self, PyObject *args, PyObject *kwds)
     return 0;
 }
 
-static PyMemberDef WrappedJSObject_members[] = {
-    {NULL}  /* Sentinel */
-};
-
-static PyMethodDef WrappedJSObject_methods[] = {
-    {NULL}, /* Sentinel */
-};
-
 static PyObject *
 WrappedJSObject_getattro(PyObject *_self, PyObject *attr)
 {
     WrappedJSObject *self = (WrappedJSObject*)_self;
-    auto env = self->cpp.object_reference.Env();
     auto wrapped = self->cpp.object_reference.Value();
     const char * utf8name = PyUnicode_AsUTF8(attr);
     if (wrapped.Has(utf8name)) {
@@ -189,8 +180,6 @@ PyInit_jswrapper(void)
     WrappedJSType.tp_new = WrappedJSObject_new;
     WrappedJSType.tp_init = WrappedJSObject_init;
     WrappedJSType.tp_dealloc = WrappedJSObject_dealloc;
-    WrappedJSType.tp_members = WrappedJSObject_members;
-    WrappedJSType.tp_methods = WrappedJSObject_methods;
     WrappedJSType.tp_call = WrappedJSObject_call;
     WrappedJSType.tp_getattro = WrappedJSObject_getattro;
     WrappedJSType.tp_str = WrappedJSObject_str;
