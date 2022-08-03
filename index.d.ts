@@ -11,7 +11,7 @@ declare module "@lmagder/pynode" {
   export type PyNodeValue = null | number | string | boolean | PyNodeWrappedPythonObject | PyNodeValue[] | { [key: string]: PyNodeValue };
 
   export type PyNode = {
-    readonly startInterpreter: (path?: string) => void;
+    readonly startInterpreter: (venvPython?: string) => void;
     readonly appendSysPath: (path: string) => void;
     readonly openFile: (filename: string) => PyNodeWrappedPythonObject;
     readonly import: (name: string) => PyNodeWrappedPythonObject;

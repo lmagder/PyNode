@@ -14,23 +14,37 @@ Napi::Value StartInterpreter(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (Py_IsInitialized())
-      return env.Null();
+      return env.Undefined();
 
 #ifdef LINUX_SO_NAME 
   //automatically do the workaround of manually loading the python .so file on linux
   dlopen(Py_STRINGIFY(LINUX_SO_NAME), RTLD_LAZY | RTLD_GLOBAL);
 #endif
 
-  if (info.Length() == 1 && info[0].IsString()) {
-    std::string pathString = info[0].As<Napi::String>().ToString();
-    std::wstring path(pathString.length(), L'#');
-    mbstowcs(&path[0], pathString.c_str(), pathString.length());
-    Py_SetPath(path.c_str());
-  }
-  
   PyImport_AppendInittab("pynode", &PyInit_jswrapper);
 
-  Py_Initialize();
+  //Assume this is a path to venv folder
+  if (info.Length() == 1 && info[0].IsString()) {
+    std::string pathString = info[0].As<Napi::String>();
+    std::wstring path(pathString.length(), L'#');
+    mbstowcs(&path[0], pathString.c_str(), pathString.length());
+    
+    PyPreConfig preConfig;
+    PyPreConfig_InitIsolatedConfig(&preConfig);
+    Py_PreInitialize(&preConfig);
+    
+    PyConfig pyConfig;
+    PyConfig_InitIsolatedConfig(&pyConfig);
+    PyConfig_SetString(&pyConfig, &pyConfig.executable, path.c_str());
+
+    Py_InitializeFromConfig(&pyConfig);
+
+    PyConfig_Clear(&pyConfig);
+  }
+  else
+  {
+    Py_Initialize();
+  }
 
   auto instData = env.GetInstanceData<PyNodeEnvData>();
   /* Load PyNode's own module into Python. This makes WrappedJSObject instances
