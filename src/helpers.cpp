@@ -38,18 +38,6 @@ bool isNapiValueWrappedPython(Napi::Env& env, Napi::Object obj) {
 	return obj.InstanceOf(env.GetInstanceData<PyNodeEnvData>()->PyNodeWrappedPythonObjectConstructor.Value());
 }
 
-int Py_GetNumArguments(PyObject* pFunc) {
-	py_object_owned fc(PyObject_GetAttrString(pFunc, "__code__"));
-	if (fc) {
-		py_object_owned ac(PyObject_GetAttrString(fc.get(), "co_argcount"));
-		if (ac) {
-			long count = PyLong_AsLong(ac.get());
-			return count;
-		}
-	}
-	return 0;
-}
-
 py_object_owned BuildPyArray(Napi::Env env, Napi::Value arg) {
 	auto arr = arg.As<Napi::Array>();
 	py_object_owned list(PyList_New(arr.Length()));
@@ -197,9 +185,9 @@ Napi::Object BuildV8Dict(Napi::Env env, PyObject* obj) {
 }
 
 Napi::Value ConvertFromPython(Napi::Env env, PyObject* pValue) {
-	Napi::Value result = env.Null();
+	Napi::Value result = env.Undefined();
 	if (pValue == Py_None) {
-		// leave as null
+		result = env.Null();
 	}
 	else if (PyBool_Check(pValue)) {
 		bool b = PyObject_IsTrue(pValue);
@@ -252,9 +240,4 @@ Napi::Value ConvertFromPython(Napi::Env env, PyObject* pValue) {
 	}
 	return result;
 }
-
-napi_value convert_python_to_napi_value(napi_env env, PyObject* obj) {
-	return ConvertFromPython(env, obj);
-}
-
 

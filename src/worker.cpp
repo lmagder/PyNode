@@ -3,10 +3,13 @@
 #include <iostream>
 #include <sstream>
 
-PyNodeWorker::PyNodeWorker(Napi::Function &callback, py_object_owned&& pyArgs,
+PyNodeWorker::PyNodeWorker(Napi::Function callback, py_object_owned&& pyArgs,
                            py_object_owned&& pFunc)
     : Napi::AsyncWorker(callback), pyArgs(std::move(pyArgs)), pFunc(std::move(pFunc)), pValue(nullptr){};
-PyNodeWorker::~PyNodeWorker(){};
+
+PyNodeWorker::PyNodeWorker(Napi::Promise::Deferred promise, py_object_owned&& pyArgs,
+    py_object_owned&& pFunc)
+    : Napi::AsyncWorker(promise.Env()), promise(promise), pyArgs(std::move(pyArgs)), pFunc(std::move(pFunc)), pValue(nullptr) {};
 
 void PyNodeWorker::Execute() {
   {
@@ -17,15 +20,19 @@ void PyNodeWorker::Execute() {
 
     if (errOccurred != NULL) {
       std::string error;
-      PyObject *pType, *pValue, *pTraceback;
-      PyErr_Fetch(&pType, &pValue, &pTraceback);
-      py_object_owned pTypeString(PyObject_Str(pType));
-      py_object_owned pValueString(PyObject_Str(pValue));
+      PyObject *pErrType = nullptr, *pErrValue = nullptr, *pErrTraceback = nullptr;
+      PyErr_Fetch(&pErrType, &pErrValue, &pErrTraceback);
+      py_object_owned pTypeString(PyObject_Str(pErrType));
+      py_object_owned pValueString(PyObject_Str(pErrValue));
 
       const char *value = PyUnicode_AsUTF8(pValueString.get());
       const char *type = PyUnicode_AsUTF8(pTypeString.get());
-      PyTracebackObject *tb = (PyTracebackObject *)pTraceback;
-      _frame *frame = tb->tb_frame;
+      PyTracebackObject *tb = (PyTracebackObject *)pErrTraceback;
+      _frame *frame = tb ? tb->tb_frame : nullptr;
+
+      if (!frame) {
+          error.append(std::string(type) + ": " + std::string(value));
+      }
 
       while (frame != NULL) {
         int line = PyCode_Addr2Line(frame->f_code, frame->f_lasti);
@@ -42,14 +49,14 @@ void PyNodeWorker::Execute() {
         frame = frame->f_back;
       }
 
-      PyErr_Restore(pType, pValue, pTraceback);
+      PyErr_Restore(pErrType, pErrValue, pErrTraceback);
       PyErr_Print();
       pValue = nullptr;
       SetError(error);
     }
     else if (!pValue)
     {
-        SetError("Function call failed");
+      SetError("Function call failed");
     }
 
     pFunc = nullptr;
@@ -57,12 +64,36 @@ void PyNodeWorker::Execute() {
   }
 }
 
+std::vector<napi_value> PyNodeWorker::GetResult(Napi::Env env)
+{
+    Napi::Value ret = env.Undefined();
+    {
+        py_thread_context ctx;
+        ret = ConvertFromPython(env, pValue.get());
+        pValue = nullptr;
+    }
+    return { env.Null(),  ret };
+}
+
 void PyNodeWorker::OnOK() {
-  py_thread_context ctx;
-  Callback().Call({ Env().Null(), ConvertFromPython(Env(), pValue.get()) });
-  pValue = nullptr;
+  if (promise)
+  {
+      promise->Resolve(GetResult(promise->Env())[1]);
+  }
+  else
+  {
+       Napi::AsyncWorker::OnOK();
+  }
+  
 }
 
 void PyNodeWorker::OnError(const Napi::Error &e) {
-  Callback().Call({e.Value(), Env().Null()});
+    if (promise) 
+    {
+        promise->Reject(e.Value());
+    }
+    else
+    {
+        Napi::AsyncWorker::OnError(e);
+    }
 }

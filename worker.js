@@ -7,9 +7,9 @@ const longRunningFunction = () => {
 
     pynode.startInterpreter()
     pynode.appendSysPath('./test_files')
-    pynode.openFile('performance')
+    const performance = pynode.openFile('performance')
     
-    pynode.call('generate_slow_number', 5, 7, (err, result) => {
+    performance.__getattr__('generate_slow_number').__callasync__(5, 7, (err, result) => {
       if (err) {
         reject(err)
         return

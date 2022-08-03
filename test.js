@@ -5,9 +5,10 @@ const nodePython = pynode
 
 nodePython.startInterpreter()
 nodePython.appendSysPath('./test_files')
-nodePython.openFile('tools')
+const tools = nodePython.openFile('tools')
 
-const call = promisify(nodePython.call)
+const call = (v, ...a) => tools.__getattr__(v).__callasync_promise__(...a)
+const callNoPromise = (v, ...a) => tools.__getattr__(v).__callasync__(...a)
 
 describe('nodePython', () => {
   describe('#eval', () => {
@@ -25,7 +26,7 @@ describe('nodePython', () => {
   describe('#call', () => {
     it('should fail if the last parameter is not a function', () => {
       try {
-        nodePython.call('return_immediate', 2)
+        callNoPromise('return_immediate', 2)
       } catch (err) {
         expect(err.message).to.equal("Last argument to 'call' must be a function")
       }
@@ -48,7 +49,7 @@ describe('nodePython', () => {
       call('return_class_object')
         .then(result => {
           expect(result.constructor.name).to.equal('PyNodeWrappedPythonObject')
-          expect(result.pytype).to.equal('Test')
+          expect(result.__pytype__).to.equal('Test')
           done()
         })
     })
@@ -76,9 +77,9 @@ describe('nodePython', () => {
     })
 
     it('should return a valid string', done => {
-      const t = nodePython.import("tools").get('Test').call();
-      expect(t.get("v")).to.equal("Test string")
-      expect(t.get("t").call()).to.equal("Test string")
+      const t = tools.__getattr__('Test').__call__();
+      expect(t.__getattr__("v")).to.equal("Test string")
+      expect(t.__getattr__("t").__call__()).to.equal("Test string")
       done() 
     })
 
@@ -95,7 +96,7 @@ describe('nodePython', () => {
     it('should throw an exception with the wrong number of arguments', done => {
       call('return_immediate', 9, 9, 9)
         .catch(e => {
-          expect(e.message).to.equal("The function 'return_immediate' has 1 arguments, 3 were passed")
+          expect(e.message).to.equal("<class 'TypeError'>: return_immediate() takes 1 positional argument but 3 were given")
           done()
         })
     })

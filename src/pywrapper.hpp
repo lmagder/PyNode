@@ -11,6 +11,8 @@ class PyNodeWrappedPythonObject : public Napi::ObjectWrap<PyNodeWrappedPythonObj
     PyNodeWrappedPythonObject(const Napi::CallbackInfo &info);
     ~PyNodeWrappedPythonObject();
     Napi::Value Call(const Napi::CallbackInfo &info);
+    Napi::Value CallAsync(const Napi::CallbackInfo& info);
+    Napi::Value CallAsyncPromise(const Napi::CallbackInfo& info);
     Napi::Value GetAttr(const Napi::CallbackInfo &info);
     Napi::Value SetAttr(const Napi::CallbackInfo &info);
     Napi::Value Repr(const Napi::CallbackInfo &info);

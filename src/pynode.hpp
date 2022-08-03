@@ -11,7 +11,6 @@
 struct PyNodeEnvData
 {
     py_object_owned pPyNodeModule;
-    py_object_owned pCurrentModule;
 
     Napi::FunctionReference PyNodeWrappedPythonObjectConstructor;
     
@@ -32,7 +31,6 @@ struct PyNodeEnvData
         weakRefToSlot.clear();
         objectMappings.clear();
         pPyNodeModule.reset();
-        pCurrentModule.reset();
     }
 
     static std::unordered_set<PyNodeEnvData*> s_envData;

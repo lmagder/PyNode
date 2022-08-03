@@ -1,20 +1,21 @@
 declare module "@lmagder/pynode" {
   export type PyNodeWrappedPythonObject = {
-    readonly call: (...args: PyNodeValue[]) => PyNodeValue;
-    readonly get: (field: string) => PyNodeValue;
-    readonly set: (field: string, value: PyNodeValue) => void;
-    readonly repr: (field: string) => string;
-    readonly pytype: string;
+    readonly __call__: (...args: PyNodeValue[]) => PyNodeValue;
+    readonly __callasync__: (...args: [...PyNodeValue[], (error: string | null, result?: PyNodeValue) => void]) => void;
+    readonly __callasync_promise__: (...args: PyNodeValue[]) => Promise<PyNodeValue>;
+    readonly __getattr__: (field: string) => PyNodeValue;
+    readonly __setattr__: (field: string, value: PyNodeValue) => void;
+    readonly __repr__: (field: string) => string;
+    readonly __pytype__: string;
   };
   export type PyNodeValue = null | number | string | boolean | PyNodeWrappedPythonObject | PyNodeValue[] | { [key: string]: PyNodeValue };
 
   export type PyNode = {
     readonly startInterpreter: (path?: string) => void;
     readonly appendSysPath: (path: string) => void;
-    readonly openFile: (filename: string) => void;
+    readonly openFile: (filename: string) => PyNodeWrappedPythonObject;
     readonly import: (name: string) => PyNodeWrappedPythonObject;
     readonly eval: (expr: string) => number;
-    readonly call: (method: string, ...args: [...PyNodeValue[], (error: string | null, result: PyNodeValue) => void]) => void;
   };
 
   export const pynode: PyNode;
