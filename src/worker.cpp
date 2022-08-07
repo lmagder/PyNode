@@ -71,7 +71,9 @@ void PyNodeWorker::OnProgress(const std::shared_ptr<PyNodeWorkerCallback>* data,
     for (size_t i = 0; i < count; i++)
     {
         data[i]->work();
-        data[i]->done.release();
+        std::unique_lock lock(data[i]->mutex);
+        data[i]->done = true;
+        data[i]->condition.notify_all();
     }
 }
 

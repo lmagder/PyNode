@@ -21,11 +21,10 @@
       'xcode_settings': {
         'GCC_ENABLE_CPP_EXCEPTIONS': 'YES',
         'CLANG_CXX_LIBRARY': 'libc++',
-        "CLANG_CXX_LANGUAGE_STANDARD":"c++20",
         'MACOSX_DEPLOYMENT_TARGET': '10.7',
       },
-      'msbuild_settings': {
-        'ClCompile': { 'LanguageStandard': "stdcpp20", },
+      'msvs_settings': {
+        'VCCLCompilerTool': { 'ExceptionHandling': 1 },
       },
       "conditions": [
         ['OS=="mac"', {
@@ -41,14 +40,14 @@
           "include_dirs": [
             "<!(echo <(PY_HOME)\\include)"
           ],
-          "msbuild_settings": {
-            "Link": {
+          "msvs_settings": {
+            "VCLinkerTool": {
               "AdditionalLibraryDirectories": "<!(echo <(PY_HOME)\\libs)"
-            },
+            }
           }
         }],
         ['OS!="win"', {
-          'cflags+': ['-Wno-missing-field-initializers', "-std=c++20" ],
+          'cflags+': ['-Wno-missing-field-initializers'],
           "variables": {
             "PY_INCLUDE%": "<!(if [ -z \"$PY_INCLUDE\" ]; then echo $(\"$PYTHON\" build_include.py); else echo $PY_INCLUDE; fi)",
             "PY_LIBS%": "<!(if [ -z \"$PY_LIBS\" ]; then echo $(\"$PYTHON\" build_ldflags.py); else echo $PY_LIBS; fi)"

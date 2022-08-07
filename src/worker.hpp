@@ -6,11 +6,15 @@
 #include "helpers.hpp"
 #include "napi.h"
 #include <optional>
-#include <semaphore>
+#include <mutex>
+#include <condition_variable>
 
 struct PyNodeWorkerCallback
 {
-	std::binary_semaphore done { 0 };
+	//it would be nice to use std::binary_semaphore but C++20 support seems sketchy in node-gyp
+	std::mutex mutex;
+    std::condition_variable condition;
+	bool done = false;
 	std::function<void()> work;
 };
 
@@ -32,8 +36,10 @@ public:
 		  auto item = std::make_shared<PyNodeWorkerCallback>();
 		  item->work = std::forward<T>(work);
 		  s_currentWorker->execProgress->Send(&item, 1);
+
 		  Py_BEGIN_ALLOW_THREADS
-		  item->done.acquire();
+		  std::unique_lock lock(item->mutex);
+		  item->condition.wait(lock, [&]() { return item->done; });
 		  Py_END_ALLOW_THREADS
 	  }
 	  else
