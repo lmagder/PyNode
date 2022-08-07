@@ -60,3 +60,5 @@ same_object = Test()
 def return_same_object():
   return same_object
   
+def call_callback(cb):
+  cb("Hello")

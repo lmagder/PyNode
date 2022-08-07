@@ -35,8 +35,8 @@ describe('nodePython', () => {
     it('should return the stack trace', done => {
       call('causes_runtime_error')
         .then(result => {
-            // exception not returned corretly
-            expect(false).to.equal(true)
+          // exception not returned corretly
+          expect(false).to.equal(true)
         })
         .catch(err => {
           // exception returned correctly
@@ -80,9 +80,16 @@ describe('nodePython', () => {
       const t = tools.__getattr__('Test').__call__();
       expect(t.__getattr__("v")).to.equal("Test string")
       expect(t.__getattr__("t").__call__()).to.equal("Test string")
-      done() 
+      done()
     })
 
+    it('should invoke the callback', done => {
+      let test = ""
+      call("call_callback", (x) => test = x).then(() => {
+        expect(test).to.equal("Hello")
+        done()
+      })
+    })
 
     it('should return the time series data', done => {
       call('time_series_data')
@@ -238,7 +245,7 @@ describe('nodePython', () => {
       it('should return an object from a python dict', done => {
         call('return_dict')
           .then(result => {
-            expect(result).to.deep.equal({'size': 71589, 'min': -99.6654762642, 'max': 879.08351843})
+            expect(result).to.deep.equal({ 'size': 71589, 'min': -99.6654762642, 'max': 879.08351843 })
             done()
           })
       })

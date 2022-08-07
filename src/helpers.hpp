@@ -28,7 +28,7 @@ public:
       pts = PyEval_SaveThread();
   }
 
-private:
+protected:
   PyGILState_STATE gstate;
   PyThreadState *pts;
 };

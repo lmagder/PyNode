@@ -3,17 +3,19 @@
 #include <iostream>
 #include <sstream>
 
+thread_local PyNodeWorker* PyNodeWorker::s_currentWorker = nullptr;
+
 PyNodeWorker::PyNodeWorker(Napi::Function callback, py_object_owned&& pyArgs,
                            py_object_owned&& pFunc)
-    : Napi::AsyncWorker(callback), pyArgs(std::move(pyArgs)), pFunc(std::move(pFunc)), pValue(nullptr){};
+    : Napi::AsyncProgressQueueWorker<std::shared_ptr<PyNodeWorkerCallback>>(callback), pyArgs(std::move(pyArgs)), pFunc(std::move(pFunc)), pValue(nullptr){};
 
 PyNodeWorker::PyNodeWorker(Napi::Promise::Deferred promise, py_object_owned&& pyArgs,
     py_object_owned&& pFunc)
-    : Napi::AsyncWorker(promise.Env()), promise(promise), pyArgs(std::move(pyArgs)), pFunc(std::move(pFunc)), pValue(nullptr) {};
+    :Napi::AsyncProgressQueueWorker<std::shared_ptr<PyNodeWorkerCallback>>(promise.Env()), promise(promise), pyArgs(std::move(pyArgs)), pFunc(std::move(pFunc)), pValue(nullptr) {};
 
-void PyNodeWorker::Execute() {
+void PyNodeWorker::Execute(const ExecutionProgress& progress) {
   {
-    py_thread_context ctx;
+    py_thread_context_worker ctx(this, progress);
 
     pValue.reset(PyObject_CallObject(pFunc.get(), pyArgs.get()));
     PyObject* errOccurred = PyErr_Occurred();
@@ -62,6 +64,15 @@ void PyNodeWorker::Execute() {
     pFunc = nullptr;
     pyArgs = nullptr;
   }
+}
+
+void PyNodeWorker::OnProgress(const std::shared_ptr<PyNodeWorkerCallback>* data, size_t count)
+{
+    for (size_t i = 0; i < count; i++)
+    {
+        data[i]->work();
+        data[i]->done.release();
+    }
 }
 
 std::vector<napi_value> PyNodeWorker::GetResult(Napi::Env env)

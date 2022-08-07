@@ -2,6 +2,7 @@
 #include "jswrapper.hpp"
 #include "helpers.hpp"
 #include "pynode.hpp"
+#include "worker.hpp"
 #include <structmember.h>
 #include <optional>
 #include "napi.h"
@@ -20,7 +21,10 @@ static void
 WrappedJSObject_dealloc(PyObject* obj)
 {
     WrappedJSObject *self = (WrappedJSObject *)obj;
-    self->cpp.~CPPData();
+    PyNodeWorker::WrapJSInteractionFromAsyncThread([&]()
+    {
+        self->cpp.~CPPData();
+    });
     Py_TYPE(self)->tp_free((PyObject *) self);
 }
 
@@ -48,14 +52,18 @@ static PyObject *
 WrappedJSObject_getattro(PyObject *_self, PyObject *attr)
 {
     WrappedJSObject *self = (WrappedJSObject*)_self;
-    auto wrapped = self->cpp.object_reference.Value();
-    const char * utf8name = PyUnicode_AsUTF8(attr);
-    if (wrapped.Has(utf8name)) {
-        auto result = wrapped.Get(utf8name);
-        py_object_owned pyval = ConvertToPython(result);
-        if (pyval) {
-            return pyval.release();
+    py_object_owned pyval;
+    PyNodeWorker::WrapJSInteractionFromAsyncThread([&]() {
+        auto wrapped = self->cpp.object_reference.Value();
+        const char* utf8name = PyUnicode_AsUTF8(attr);
+        if (wrapped.Has(utf8name)) {
+            auto result = wrapped.Get(utf8name);
+            pyval = ConvertToPython(result);
+
         }
+    });
+    if (pyval) {
+        return pyval.release();
     }
     PyErr_SetObject(PyExc_AttributeError, attr);
     Py_RETURN_NONE;
@@ -65,58 +73,69 @@ static PyObject *
 WrappedJSObject_call(PyObject *_self, PyObject *args, PyObject *kwargs)
 {
     WrappedJSObject *self = (WrappedJSObject*)_self;
-    auto env = self->cpp.object_reference.Env();
-    auto wrapped = self->cpp.object_reference.Value();
+    py_object_owned pyval;
+    const char* error = nullptr;
 
-    if (!wrapped.IsFunction()) {
-        PyErr_SetString(PyExc_RuntimeError, "Error calling javascript function");
-        Py_RETURN_NONE;
-    }
+    PyNodeWorker::WrapJSInteractionFromAsyncThread([&]() {
+        auto env = self->cpp.object_reference.Env();
+        auto wrapped = self->cpp.object_reference.Value();
 
-    auto wrappedFunc = wrapped.As<Napi::Function>();
+        if (!wrapped.IsFunction()) {
+            error = "Error calling javascript function";
+            return;
+        }
 
-    py_object_owned seq(PySequence_Fast(args, "*args must be a sequence"));
-    Py_ssize_t len = PySequence_Size(args);
-    auto jsargs = std::vector<Napi::Value>(len);
-    for (Py_ssize_t i = 0; i < len; i++) {
-        PyObject *arg = PySequence_Fast_GET_ITEM(seq.get(), i);
-        jsargs[i] = ConvertFromPython(env, arg);
-    }
+        auto wrappedFunc = wrapped.As<Napi::Function>();
 
-    Napi::Object thisPtr = self->cpp.object_reference.Value();
+        py_object_owned seq(PySequence_Fast(args, "*args must be a sequence"));
+        Py_ssize_t len = PySequence_Size(args);
+        auto jsargs = std::vector<Napi::Value>(len);
+        for (Py_ssize_t i = 0; i < len; i++) {
+            PyObject* arg = PySequence_Fast_GET_ITEM(seq.get(), i);
+            jsargs[i] = ConvertFromPython(env, arg);
+        }
 
-    auto result = wrappedFunc.Call(thisPtr, jsargs);
-    if (!result) {
-        PyErr_SetString(PyExc_RuntimeError, "Error calling javascript function");
-        Py_RETURN_NONE;
-    }
+        Napi::Object thisPtr = self->cpp.object_reference.Value();
 
-    py_object_owned pyval = ConvertToPython(result);
-    if (!pyval) {
-        PyErr_SetString(PyExc_RuntimeError, "Error converting JS return value to Python");
-        Py_RETURN_NONE;
-    }
+        auto result = wrappedFunc.Call(thisPtr, jsargs);
+        if (!result) {
+            error = "Error calling javascript function";
+            return;
+        }
 
-    return pyval.release();
+        pyval = ConvertToPython(result);
+     });
+    if (error)
+        PyErr_SetString(PyExc_RuntimeError, error);
+
+    return pyval ? pyval.release() : Py_NewRef(Py_None);
 }
 
 PyObject * WrappedJSObject_str(PyObject *_self) {
     WrappedJSObject *self = (WrappedJSObject *)_self;
+    py_object_owned pyval;
+    const char* error = nullptr;
 
-    auto wrapped = self->cpp.object_reference.Value();
-    auto result = wrapped.ToString();
-    if (result.IsEmpty()) {
-        PyErr_SetString(PyExc_RuntimeError, "Error coercing javascript value to string");
-        Py_RETURN_NONE;
-    }
+    PyNodeWorker::WrapJSInteractionFromAsyncThread([&]() {
+        auto wrapped = self->cpp.object_reference.Value();
+        auto result = wrapped.ToString();
+        if (result.IsEmpty()) {
+            error = "Error coercing javascript value to string";
+            return;
+        }
 
-    /* Result should just be a JavaScript string at this point */
-    py_object_owned pyval = ConvertToPython(result);
-    if (pyval == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "Error converting JavaScript ToString item to Python");
-        Py_RETURN_NONE;
-    }
-    return pyval.release();
+        /* Result should just be a JavaScript string at this point */
+        pyval = ConvertToPython(result);
+        if (pyval == NULL) {
+            error = "Error converting JavaScript ToString item to Python";
+            return;
+        }
+     });
+
+    if (error)
+        PyErr_SetString(PyExc_RuntimeError, error);
+
+    return pyval ? pyval.release() : Py_NewRef(Py_None);
 }
 
 PyTypeObject WrappedJSType = {
@@ -155,11 +174,14 @@ static PyMethodDef weakRefCleanupFuncMethodDef = {
         "__pynode_gc_cleanup__",
         [](PyObject* self, PyObject* arg) {
 
-            for (auto env : PyNodeEnvData::s_envData) {
-                if (auto node = env->weakRefToSlot.extract(arg))  {
-                    env->objectMappings.erase(node.mapped());
+            PyNodeWorker::WrapJSInteractionFromAsyncThread([&]()
+            {
+                for (auto env : PyNodeEnvData::s_envData) {
+                    if (auto node = env->weakRefToSlot.extract(arg)) {
+                        env->objectMappings.erase(node.mapped());
+                    }
                 }
-            }
+            });
             Py_RETURN_NONE;
         },
         METH_O,
