@@ -222,7 +222,7 @@ Napi::Value ConvertFromPython(Napi::Env env, PyObject* pValue) {
 		result = obj;
 	}
 	else {
-		
+		std::unique_lock lock{ PyNodeEnvData::s_envDataMutex };
 		auto instData = env.GetInstanceData<PyNodeEnvData>();
 		auto findIt = instData->objectMappings.find(pValue);
 		Napi::Object obj = findIt == instData->objectMappings.end() ? Napi::Object() : findIt->second.existingJSObject.Value();

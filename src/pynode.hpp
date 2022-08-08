@@ -23,8 +23,12 @@ struct PyNodeEnvData
     std::map<PyObject*, WeakRef> objectMappings;
     std::unordered_map<PyObject*, std::map<PyObject*, WeakRef>::iterator> weakRefToSlot;
 
-    PyNodeEnvData() { s_envData.insert(this); }
+    PyNodeEnvData() {
+        std::unique_lock lock{ s_envDataMutex };
+        s_envData.insert(this); 
+    }
     ~PyNodeEnvData() { 
+        std::unique_lock lock{ s_envDataMutex };
         s_envData.erase(this);
 
         py_ensure_gil gil;
@@ -33,6 +37,7 @@ struct PyNodeEnvData
         pPyNodeModule.reset();
     }
 
+    static std::mutex s_envDataMutex;
     static std::unordered_set<PyNodeEnvData*> s_envData;
 };
 

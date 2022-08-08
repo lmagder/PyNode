@@ -8,6 +8,7 @@
 #include "jswrapper.hpp"
 #include <iostream>
 
+std::mutex PyNodeEnvData::s_envDataMutex;
 std::unordered_set<PyNodeEnvData*> PyNodeEnvData::s_envData;
 
 Napi::Value StartInterpreter(const Napi::CallbackInfo &info) {

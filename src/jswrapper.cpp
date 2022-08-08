@@ -173,15 +173,28 @@ static PyModuleDef pynodemodule = {
 static PyMethodDef weakRefCleanupFuncMethodDef = {
         "__pynode_gc_cleanup__",
         [](PyObject* self, PyObject* arg) {
-
-            PyNodeWorker::WrapJSInteractionFromAsyncThread([&]()
+            std::map<PyObject*, PyNodeEnvData::WeakRef>::node_type removedRef;
+            
             {
+                std::unique_lock lock{ PyNodeEnvData::s_envDataMutex };
                 for (auto env : PyNodeEnvData::s_envData) {
                     if (auto node = env->weakRefToSlot.extract(arg)) {
-                        env->objectMappings.erase(node.mapped());
+                        removedRef = env->objectMappings.extract(node.mapped());
+                        break;
                     }
                 }
-            });
+            }
+
+            if (removedRef)
+            {
+                removedRef.mapped().pyWeakRef.reset(); //deref the python stuff here
+                //Annoying but interally WrapJSInteractionFromAsyncThread does a copy
+                auto existingJSObject = std::make_shared<Napi::ObjectReference>(std::move(removedRef.mapped().existingJSObject));
+                PyNodeWorker::WrapJSInteractionFromAsyncThread([existingJSObject]()
+                {
+                    existingJSObject->Reset();
+                });
+            }
             Py_RETURN_NONE;
         },
         METH_O,
